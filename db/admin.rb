@@ -106,7 +106,11 @@ class Admin < ActiveRecord::Base
     when Telegram::Bot::Types::CallbackQuery
       self.process_message_callback(m)
     when Telegram::Bot::Types::Message
-      self.process_message_text(m)
+      if m.forward_from.nil?
+        self.process_message_text(m)
+      else
+        self.process_message_forward(m)
+      end
     end
   end
 
@@ -158,6 +162,17 @@ class Admin < ActiveRecord::Base
       else
         $replies.push(chat_id: self.chat_id, text: 'Unsupported command.')
       end
+    end
+  end
+
+  def process_message_forward(m)
+    u = User.find_by(chat_id: m.forward_from.id)
+    u = User.find_by(username: m.forward_from.username) if u.nil?
+    u = User.create!(username: m.forward_from.username) if u.nil? && m.forward_from.username
+    if u
+      t = Ticket.create!(user_id: u.id, created_at: Time.now)
+      t.notify_new_ticket
+      Message.from_user(u, t, m)
     end
   end
 end
