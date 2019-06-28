@@ -7,32 +7,46 @@ class Ticket < ActiveRecord::Base
     text = "Ticket /#{self.id}\nCreated at #{self.created_at.strftime('%F %T UTC')}\nCreated by #{self.user.get_name}"
     text += "\nAssigned to #{self.admin.get_name}" if self.admin
     text += "\nTicket is CLOSED" if self.status == 11 || self.status == 21
-    text += "\nTicket is REJECTED" if self.status == 12 || self.status == 22
+    text += "\nTicket is CANCELED" if self.status == 12
+    text += "\nTicket is REJECTED" if self.status == 22
     $replies.push(chat_id: chat_id, text: text, reply_markup: BotHelper.remove_keyboard)
+    text = ""
     self.messages.order(messaged_at: :asc).each do |message|
-      data = {
-          chat_id: chat_id
-      }
-      if message.photo
-        data[:photo] = message.photo
-        data[:caption] = message.messaged_at.strftime('%F %T UTC')
-        data[:caption] += " [U:#{message.user.get_name}]" if message.user
-        data[:caption] += " [A:#{message.admin.get_name}]" if message.admin
-        data[:caption] += "\n#{message.message}" if message.message
-      elsif message.file
-        data[:document] = message.file
-        data[:caption] = message.messaged_at.strftime('%F %T UTC')
-        data[:caption] += " [U:#{message.user.get_name}]" if message.user
-        data[:caption] += " [A:#{message.admin.get_name}]" if message.admin
-        data[:caption] += "\n#{message.message}" if message.message
+      if message.photo || message.file
+        if text.length > 0
+          $replies.push(chat_id: chat_id, text: text)
+          text = ""
+        end
+        data = {chat_id: chat_id}
+        if message.photo
+          data[:photo] = message.photo
+          data[:caption] = message.messaged_at.strftime('%F %T UTC')
+          data[:caption] += " [U:#{message.user.get_name}]" if message.user
+          data[:caption] += " [A:#{message.admin.get_name}]" if message.admin
+          data[:caption] += "\n#{message.message}" if message.message
+        elsif message.file
+          data[:document] = message.file
+          data[:caption] = message.messaged_at.strftime('%F %T UTC')
+          data[:caption] += " [U:#{message.user.get_name}]" if message.user
+          data[:caption] += " [A:#{message.admin.get_name}]" if message.admin
+          data[:caption] += "\n#{message.message}" if message.message
+        end
+        $replies.push(data)
       else
-        data[:text] = message.messaged_at.strftime('%F %T UTC')
-        data[:text] += " [U:#{message.user.get_name}]" if message.user
-        data[:text] += " [A:#{message.admin.get_name}]" if message.admin
-        data[:text] += "\n#{message.message}" if message.message
+        newtext = ""
+        newtext += message.messaged_at.strftime('%F %T UTC')
+        newtext += " [U:#{message.user.get_name}]" if message.user
+        newtext += " [A:#{message.admin.get_name}]" if message.admin
+        newtext += "\n#{message.message}" if message.message
+        if (text + "\n" + newtext).length >= 4096
+          $replies.push(chat_id: chat_id, text: text)
+          text = newtext
+        else
+          text += "\n" + newtext
+        end
       end
-      $replies.push(data)
     end
+    $replies.push(chat_id: chat_id, text: text) if text.length > 0
   end
 
   def notify_new_ticket
